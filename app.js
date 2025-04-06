@@ -5,8 +5,22 @@ let mysql2 = require("mysql2");
 // Import the Express framework to create a web server.
 let express = require("express");
 
+// Import body-parser to parse form data
+let bodyParser = require("body-parser");
+
+// Import CORS to allow cross-origin requests
+let cors = require("cors");
+
 // Initialize an Express application
-let app = express();
+let app = express(); 
+
+
+// Middleware setup - MUST come before route handlers
+app.use(bodyParser.urlencoded({ extended: true })); // For parsing form data
+app.use(bodyParser.json()); // For parsing JSON data (optional, but good practice)
+app.use(cors());
+
+
 //make it listen at port 5000.
 app.listen(5000, () => {
   console.log("The server is up and running.");
@@ -118,5 +132,27 @@ FOREIGN KEY (user_id) REFERENCES User(User_id)
         });
       });
     });
+  });
+});
+
+
+// #3 - New code for handling form submission
+app.post("/add-product", (req, res) => {
+  // Get form data from the request body
+  const { product_url, product_name } = req.body;
+
+  // SQL query to insert data into Products table
+  const insertQuery = `INSERT INTO Products (Product_url, Product_name) 
+                      VALUES (?, ?)`;
+  
+  // Execute the query with form data
+  connection.query(insertQuery, [product_url, product_name], (err, result) => {
+    if (err) {
+      console.log("Error inserting product: " + err.message);
+      return res.status(500).send("Error adding product to database");
+    }
+    
+    console.log("Product added successfully!");
+    res.send("Product added successfully!");
   });
 });
