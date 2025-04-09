@@ -5,24 +5,20 @@ let mysql2 = require("mysql2");
 // Import the Express framework to create a web server.
 let express = require("express");
 
-// Import body-parser to parse form data
-let bodyParser = require("body-parser");
-
 // Import CORS to allow cross-origin requests
 let cors = require("cors");
 
 // Initialize an Express application
-let app = express(); 
+let app = express();
 
+let port = 5000;
 
 // Middleware setup - MUST come before route handlers
-app.use(bodyParser.urlencoded({ extended: true })); // For parsing form data
-app.use(bodyParser.json()); // For parsing JSON data (optional, but good practice)
+app.use(express.urlencoded({ extended: true })); // For parsing form data
 app.use(cors());
 
-
 //make it listen at port 5000.
-app.listen(5000, () => {
+app.listen(port, () => {
   console.log("The server is up and running.");
 });
 
@@ -135,24 +131,95 @@ FOREIGN KEY (user_id) REFERENCES User(User_id)
   });
 });
 
-
 // #3 - New code for handling form submission
+// Single endpoint to handle all table insertions
 app.post("/add-product", (req, res) => {
-  // Get form data from the request body
-  const { product_url, product_name } = req.body;
+  // Extract all form data from request body
+  const {
+      product_url,
+      product_name,
+      product_brief_description,
+      product_description,
+      product_img,
+      product_link,
+      starting_price,
+      price_range,
+      user_name,
+      user_password,
+      user_id // Optional: if provided, use existing user; otherwise create new
+  } = req.body;
 
-  // SQL query to insert data into Products table
-  const insertQuery = `INSERT INTO Products (Product_url, Product_name) 
-                      VALUES (?, ?)`;
-  
-  // Execute the query with form data
-  connection.query(insertQuery, [product_url, product_name], (err, result) => {
-    if (err) {
-      console.log("Error inserting product: " + err.message);
-      return res.status(500).send("Error adding product to database");
-    }
-    
-    console.log("Product added successfully!");
-    res.send("Product added successfully!");
+  // Start with Products table insertion
+  const productQuery = `INSERT INTO Products (Product_url, Product_name) VALUES (?, ?)`;
+  connection.query(productQuery, [product_url, product_name], (err, productResult) => {
+      if (err) {
+          console.log("Error inserting product: " + err.message);
+          return res.status(500).send("Error adding product");
+      }
+
+      const productId = productResult.insertId;
+
+      // Insert Product Description
+      const descQuery = `INSERT INTO Product_Description 
+                        (Product_id, Product_brief_description, Product_description, Product_img, Product_link) 
+                        VALUES (?, ?, ?, ?, ?)`;
+      connection.query(descQuery, 
+          [productId, product_brief_description, product_description, product_img, product_link], 
+          (err, descResult) => {
+              if (err) {
+                  console.log("Error inserting description: " + err.message);
+                  return res.status(500).send("Error adding product description");
+              }
+
+              // Insert Product Price
+              const priceQuery = `INSERT INTO Product_Price 
+                                (Product_id, Starting_price, Price_range) 
+                                VALUES (?, ?, ?)`;
+              connection.query(priceQuery, 
+                  [productId, starting_price, price_range], 
+                  (err, priceResult) => {
+                      if (err) {
+                          console.log("Error inserting price: " + err.message);
+                          return res.status(500).send("Error adding product price");
+                      }
+
+                      // Handle User (create new or use existing)
+                      let finalUserId;
+                      if (user_id) {
+                          // Use existing user if user_id is provided
+                          finalUserId = user_id;
+                          insertOrder(finalUserId);
+                      } else {
+                          // Create new user if no user_id is provided
+                          const userQuery = `INSERT INTO User (User_name, User_password) VALUES (?, ?)`;
+                          connection.query(userQuery, 
+                              [user_name, user_password], 
+                              (err, userResult) => {
+                                  if (err) {
+                                      console.log("Error inserting user: " + err.message);
+                                      return res.status(500).send("Error adding user");
+                                  }
+                                  finalUserId = userResult.insertId;
+                                  insertOrder(finalUserId);
+                              });
+                      }
+
+                      // Function to insert Order (called after user handling)
+                      function insertOrder(userId) {
+                          const orderQuery = `INSERT INTO Orders (Product_id, User_id) VALUES (?, ?)`;
+                          connection.query(orderQuery, 
+                              [productId, userId], 
+                              (err, orderResult) => {
+                                  if (err) {
+                                      console.log("Error inserting order: " + err.message);
+                                      return res.status(500).send("Error adding order");
+                                  }
+                                  console.log("Complete product entry added successfully!");
+                                  res.send("Product and all related data added successfully!");
+                              });
+                      }
+                  });
+              });
+          });
   });
-});
+
